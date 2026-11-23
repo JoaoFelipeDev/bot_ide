@@ -1,0 +1,8 @@
+# De onde o programa busca atualizacoes automaticas.
+# Repo publico no GitHub: nas Releases, publique um .zip gerado por scripts/criar_pacote_zip.ps1
+# e uma tag no formato v0.2.0 (igual a versao em pyproject.toml / id_monitor.__version__).
+#
+# Repo publico de Releases (atualizacao automatica do cliente).
+github_repo: "JoaoFelipeDev/bot_ide"
+asset_name_contains: "MonitorPrecosIDELivraria"
+check_on_startup: true

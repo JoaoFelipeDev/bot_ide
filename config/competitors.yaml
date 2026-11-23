@@ -1,0 +1,91 @@
+# Configuracao dos concorrentes monitorados.
+#
+# Cada concorrente usa o scraper generico (GenericCssScraper), que busca no site e extrai
+# titulo/preco/link a partir de uma "receita": como buscar (search_url_template, onde {query}
+# vira o titulo/ISBN codificado) + seletores CSS (item, titulo, preco, link, disponibilidade).
+#
+# COMO A RECEITA E PREENCHIDA
+#   - Automaticamente, pela IA: na interface (aba "Concorrentes" -> "Mapear com IA") ou pelo
+#     comando `id-monitor map-site <key>`. Precisa da chave da API do Claude (aba
+#     "Configuracoes de IA"). A IA descobre a busca e os seletores UMA vez, a receita e validada
+#     com uma busca de teste e salva aqui (com backup em config/backups/). Depois disso a coleta
+#     usa so CSS e nao gasta tokens. Se o site mudar de layout, a IA repara a receita sozinha.
+#   - Ou na mao: "Editar seletores/URL..." na interface, ou editando este arquivo.
+#
+# Campos extras preenchidos pelo mapeamento:
+#   search_mode          "url" (padrao) ou "type" (digita no campo search_input_selector)
+#   search_input_selector, mapped_by_ai, mapped_at
+#   status               ok | fora_do_ar | precisa_mapear
+#
+# Para adicionar um concorrente com logica customizada (ex.: paginacao em JS), crie um arquivo em
+# src/id_monitor/scrapers/<nome>.py com uma classe que sobrescreva search() de GenericCssScraper e
+# aponte module/class_name para ela. Para um site comum, use "Novo concorrente..." na interface.
+competitors:
+  # Servidor de busca (site.livrariacultura.com.br) fora do ar em 18/11/2026: nao responde nem
+  # em http nem em https, nao e bloqueio anti-robo. Reative quando voltar.
+- key: livraria_cultura
+  name: "Livraria Cultura"
+  base_url: "https://www.livrariacultura.com.br"
+  module: "id_monitor.scrapers.livraria_cultura"
+  class_name: "LivrariaCulturaScraper"
+  active: false
+  status: fora_do_ar
+
+- key: boa_nova
+  name: "Boa Nova Editora"
+  base_url: "https://www.boanova.net"
+  module: "id_monitor.scrapers.boa_nova"
+  class_name: "BoaNovaScraper"
+  active: true
+  status: ok
+
+  search_mode: url
+  search_url_template: https://www.boanova.net/busca?busca={query}
+  result_item_selector: div.spots-interna > div.spot
+  title_selector: h3.spotTitle
+  price_selector: div.precoPor span.fbits-valor
+  link_selector: a.spot-parte-dois
+  mapped_by_ai: true
+  mapped_at: '2026-11-18T12:17:05'
+- key: feb_editora
+  name: "FEB Editora"
+  base_url: "https://www.febeditora.com.br"
+  module: "id_monitor.scrapers.feb_editora"
+  class_name: "FebEditoraScraper"
+  active: true
+  status: ok
+
+  # Site institucional (Wix) de uma livraria fisica em Campinas, sem loja online visivel em
+  # 18/11/2026. Desativado; se existir catalogo online, informe o endereco e use "Mapear com IA".
+  search_mode: url
+  search_url_template: 
+    https://www.febeditora.com.br/listaprodutos.asp?digitada=true&texto={query}
+  result_item_selector: div.DivListProd
+  title_selector: span.ProductListNomeProd
+  price_selector: div.price.home-price
+  link_selector: div.DivProductListImagemProd a, div.DivProductListNomeProd a
+  mapped_by_ai: true
+  mapped_at: '2026-11-18T12:17:22'
+- key: candeeira
+  name: "Livraria Candeiro"
+  base_url: "https://www.livrariacandeeiro.com.br"
+  module: "id_monitor.scrapers.candeeira"
+  class_name: "CandeeiraScraper"
+  active: false
+  status: precisa_mapear
+
+- key: livraria_curitiba
+  name: "Livrarias Curitiba"
+  base_url: "https://www.livrariascuritiba.com.br"
+  module: "id_monitor.scrapers.livraria_curitiba"
+  class_name: "LivrariaCuritibaScraper"
+  active: true
+  status: ok
+  search_mode: url
+  search_url_template: https://www.livrariascuritiba.com.br/{query_path}
+  result_item_selector: li.livros > div.product-id
+  title_selector: h3.box-name
+  price_selector: div.bestPrice
+  link_selector: a.productImage
+  mapped_by_ai: true
+  mapped_at: '2026-11-18T12:04:59'

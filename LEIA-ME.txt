@@ -1,0 +1,35 @@
+Monitor de Precos de Concorrentes - IDE Livraria
+================================================
+
+IMPORTANTE (leia antes de instalar)
+----------------------------------
+NAO abra o "instalar.bat" direto de dentro do WinRAR / da janela do .zip.
+Isso gera o erro "install.ps1 nao existe" (pasta Temp\Rar$...).
+
+COMO INSTALAR CERTO
+-------------------
+1. Clique com o BOTAO DIREITO no arquivo .zip
+2. Escolha "Extrair para ..." / "Extract to MonitorPrecosIDELivraria_..."
+3. Abra a PASTA que foi criada (ex.: C:\Users\...\Desktop\MonitorPrecos...)
+4. De dois cliques em:  instalar.bat
+5. Na janela preta, aperte uma tecla e aguarde (precisa de internet; alguns minutos)
+6. No fim, o programa abre sozinho e cria um atalho na Area de Trabalho
+
+Depois de instalado, use o atalho "Monitor de Precos IDE Livraria"
+ou o arquivo "Monitor de Precos.bat" nesta pasta.
+
+USO RAPIDO
+----------
+1. Aba "Livros monitorados" -> "Novo livro..."
+2. Preencha ISBN (importante), titulo, autor e seu preco
+3. Pode ser livro da IDE ou de outra editora
+4. "Coletar tudo" e depois veja a aba "Resultados"
+5. Se a lista vier cheia, use "Limpar lista..." e cadastre so o que importa
+
+ATUALIZACOES
+------------
+Depois de apontar um repo publico no GitHub em config/update.yaml, use o botao
+"Verificar atualizacoes" (ou id-monitor self-update). A lista de livros e a pasta
+data/ nao sao apagadas. Como publicar Releases: INSTALACAO.md secao 5.
+
+Mais detalhes: INSTALACAO.md e README.md

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "id-monitor"
+version = "0.2.0"
+description = "Monitor de precos de concorrentes para a IDE Livraria"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "playwright>=1.47",
+    "SQLAlchemy>=2.0",
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+    "rapidfuzz>=3.9",
+    "pyyaml>=6.0",
+    "ruamel.yaml>=0.18",
+    "anthropic>=0.40",
+    "keyring>=25.0",
+]
+
+[project.scripts]
+id-monitor = "id_monitor.cli:cli"
+
+[project.gui-scripts]
+id-monitor-gui = "id_monitor.gui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

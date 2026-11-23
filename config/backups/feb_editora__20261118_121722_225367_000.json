@@ -1,0 +1,17 @@
+{
+  "key": "feb_editora",
+  "saved_at": "2026-11-18T12:17:22",
+  "recipe": {
+    "search_mode": "url",
+    "search_input_selector": null,
+    "search_url_template": null,
+    "result_item_selector": null,
+    "title_selector": null,
+    "price_selector": null,
+    "link_selector": null,
+    "availability_selector": null,
+    "mapped_by_ai": false,
+    "mapped_at": null,
+    "status": "precisa_mapear"
+  }
+}
