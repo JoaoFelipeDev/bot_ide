@@ -55,7 +55,15 @@ from id_monitor.reporting.results import ResultRow, latest_results
 from id_monitor.reporting.results import summarize as summarize_results
 from id_monitor.sales_import import import_sales_csv
 from id_monitor.smoke_test import run_smoke_test
-from id_monitor.storage.db import Product, ProductOrigin, clear_monitored_books, get_session, init_db, sync_competitors_from_config
+from id_monitor.storage.db import (
+    Product,
+    ProductOrigin,
+    clear_monitored_books,
+    find_product_by_isbn,
+    get_session,
+    init_db,
+    sync_competitors_from_config,
+)
 
 
 def competitor_status_text(competitor: CompetitorConfig) -> str:
@@ -240,17 +248,14 @@ class App(tk.Tk):
         if not values:
             return
         session = get_session()
-        existing = None
-        if values.get("isbn"):
-            existing = session.query(Product).filter(Product.isbn == values["isbn"]).first()
-        if existing is None:
-            existing = session.query(Product).filter(Product.title.ilike(values["title"])).one_or_none()
+        # Unicidade so por ISBN: mesmo titulo com ISBN diferente = outra edicao (ok cadastrar).
+        existing = find_product_by_isbn(session, values.get("isbn"))
         if existing is not None:
             messagebox.showwarning(
-                "Livro ja existe",
-                f"'{existing.title}' ja esta na lista"
-                + (f" (ISBN {existing.isbn})" if existing.isbn else "")
-                + ". Use Editar.",
+                "ISBN ja cadastrado",
+                f"Ja existe um livro com este ISBN na lista:\n"
+                f"'{existing.title}' (ISBN {existing.isbn}).\n\n"
+                "Use Editar nesse item, ou cadastre com outro ISBN se for outra edicao.",
             )
             return
 
@@ -282,6 +287,14 @@ class App(tk.Tk):
         if not values:
             return
         session = get_session()
+        conflict = find_product_by_isbn(session, values.get("isbn"))
+        if conflict is not None and conflict.id != product.id:
+            messagebox.showwarning(
+                "ISBN ja cadastrado",
+                f"O ISBN {values.get('isbn')} ja pertence a '{conflict.title}'. "
+                "Cada ISBN so pode aparecer uma vez na lista.",
+            )
+            return
         db_product = session.get(Product, product.id)
         db_product.title = values["title"]
         db_product.author = values.get("author")

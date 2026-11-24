@@ -157,10 +157,18 @@ def select_items(
 
 
 def _find_product(session, item: CatalogItem) -> Product | None:
+    """Casa pelo ISBN. Titulo so preenche livro ja cadastrado SEM ISBN (nao mistura edicoes)."""
+    from id_monitor.storage.db import find_product_by_isbn
+
     if item.isbn:
-        found = session.query(Product).filter(Product.isbn == item.isbn).first()
+        found = find_product_by_isbn(session, item.isbn)
         if found is not None:
             return found
+        return (
+            session.query(Product)
+            .filter(Product.isbn.is_(None), Product.title.ilike(item.title))
+            .first()
+        )
     return session.query(Product).filter(Product.title.ilike(item.title)).first()
 
 

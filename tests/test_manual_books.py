@@ -36,6 +36,37 @@ def test_product_stores_author(isolated_db):
     assert book.isbn == "9788573414950"
 
 
+def test_same_title_different_isbn_are_distinct(isolated_db):
+    """Edicoes diferentes do mesmo titulo podem coexistir se o ISBN for outro."""
+    from id_monitor.storage.db import find_product_by_isbn
+
+    session = get_session()
+    session.add(Product(
+        title="O Evangelho Segundo o Espiritismo - Edicao Economica",
+        author="Allan Kardec",
+        isbn="9788594662903",
+        price_id_livraria=15.20,
+        origin=ProductOrigin.MANUAL,
+        active=True,
+    ))
+    session.commit()
+
+    assert find_product_by_isbn(session, "9788594662903") is not None
+    assert find_product_by_isbn(session, "978-85-94662-90-3") is not None
+    assert find_product_by_isbn(session, "9788573287547") is None
+
+    session.add(Product(
+        title="O Evangelho Segundo o Espiritismo - Nova Traducao",
+        author="Allan Kardec",
+        isbn="9788573287547",
+        price_id_livraria=33.0,
+        origin=ProductOrigin.MANUAL,
+        active=True,
+    ))
+    session.commit()
+    assert session.query(Product).count() == 2
+
+
 def test_clear_monitored_books_removes_all(isolated_db):
     session = get_session()
     session.add_all([

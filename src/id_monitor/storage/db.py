@@ -175,6 +175,27 @@ def clear_monitored_books(*, delete_history: bool = True) -> int:
     return count
 
 
+def find_product_by_isbn(session: Session, isbn: str | None) -> Product | None:
+    """Localiza livro pelo ISBN (digitos normalizados). Titulo nao entra na comparacao.
+
+    Duas edicoes do mesmo titulo com ISBNs diferentes sao livros distintos.
+    Sem ISBN, devolve None (nao ha chave unica para bloquear).
+    """
+    from id_monitor.matching.isbn import normalize_isbn_digits
+
+    digits = normalize_isbn_digits(isbn) if isbn else None
+    if not digits:
+        return None
+    found = session.query(Product).filter(Product.isbn == digits).first()
+    if found is not None:
+        return found
+    # Dados antigos podem ter hifen/espaco: compara normalizando.
+    for product in session.query(Product).filter(Product.isbn.isnot(None)).all():
+        if normalize_isbn_digits(product.isbn) == digits:
+            return product
+    return None
+
+
 def get_session() -> Session:
     """Abre uma nova sessao SQLAlchemy. O chamador e responsavel por fechar/usar como context manager."""
     global _SessionFactory

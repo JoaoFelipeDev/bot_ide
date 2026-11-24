@@ -1,7 +1,7 @@
 """CLI do Monitor de Precos IDE Livraria.
 
 Comandos:
-  id-monitor add-book     Adiciona/atualiza manualmente um livro na lista de monitoramento.
+  id-monitor add-book     Adiciona/atualiza um livro (atualiza so se o ISBN ja existir).
   id-monitor list-books   Lista os livros atualmente monitorados (ativos).
   id-monitor import-sales Importa um CSV de vendas e seleciona automaticamente os top N titulos.
   id-monitor import-catalog Importa titulos, ISBN e precos do catalogo da IDE Editora (Firestore).
@@ -58,16 +58,13 @@ def cli() -> None:
 @click.option("--sku", default=None, help="SKU interno do livro, se houver.")
 @click.option("--price", "price", type=float, default=None, help="Seu preco de referencia para comparar.")
 def add_book(title: str, author: str | None, isbn: str | None, sku: str | None, price: float | None) -> None:
-    """Adiciona um livro a lista de monitoramento manualmente, ou atualiza se ja existir (ISBN/titulo)."""
+    """Adiciona um livro manualmente, ou atualiza se o mesmo ISBN ja existir (titulo nao conta)."""
     from id_monitor.matching.isbn import normalize_isbn_digits
+    from id_monitor.storage.db import find_product_by_isbn
 
     isbn = normalize_isbn_digits(isbn) if isbn else None
     session = get_session()
-    existing = None
-    if isbn:
-        existing = session.query(Product).filter(Product.isbn == isbn).first()
-    if existing is None:
-        existing = session.query(Product).filter(Product.title.ilike(title)).one_or_none()
+    existing = find_product_by_isbn(session, isbn)
     if existing is None:
         existing = Product(
             title=title, author=author, isbn=isbn, sku=sku, price_id_livraria=price,
@@ -83,7 +80,7 @@ def add_book(title: str, author: str | None, isbn: str | None, sku: str | None, 
         if price is not None:
             existing.price_id_livraria = price
         existing.active = True
-        click.echo(f"Livro atualizado: {title}")
+        click.echo(f"Livro atualizado (mesmo ISBN {isbn}): {title}")
     session.commit()
 
 
