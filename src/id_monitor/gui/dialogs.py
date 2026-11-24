@@ -192,7 +192,7 @@ def ask_competitor_fields(parent: tk.Tk, competitor: Any) -> dict[str, Any] | No
 
 
 def ask_new_competitor(parent: tk.Tk, can_map: bool) -> dict[str, Any] | None:
-    """Pede so nome e URL de um concorrente novo. Retorna {'name','url','map_now'} ou None."""
+    """Pede so nome e URL de um concorrente novo. Retorna {'name','base_url','map_now'} ou None."""
     result: dict[str, Any] = {}
     win = tk.Toplevel(parent)
     win.title("Novo concorrente")
@@ -228,7 +228,7 @@ def ask_new_competitor(parent: tk.Tk, can_map: bool) -> dict[str, Any] | None:
             messagebox.showwarning("Campos obrigatorios", "Informe nome e URL.", parent=win)
             return
         result["name"] = name
-        result["url"] = url
+        result["base_url"] = url
         result["map_now"] = bool(map_var.get())
         win.destroy()
 

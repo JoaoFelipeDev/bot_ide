@@ -807,15 +807,18 @@ class App(tk.Tk):
         values = ask_new_competitor(self, can_map=has_api_key())
         if not values:
             return
+        base_url = values.get("base_url") or values.get("url") or ""
         try:
-            competitor = add_competitor(values["name"], values["base_url"])
+            competitor = add_competitor(values["name"], base_url)
         except ValueError as exc:
             messagebox.showwarning("Dados invalidos", str(exc))
             return
         sync_competitors_from_config(get_session())
         self.refresh_competitors()
+        self.competitors_tree.selection_set(competitor.key)
+        self.competitors_tree.see(competitor.key)
         self._append_log(f"Concorrente cadastrado: {competitor.name}.")
-        if values["map_now"]:
+        if values.get("map_now"):
             self._run_mapping([competitor.key])
 
     def _notify_pending_mapping(self) -> None:
