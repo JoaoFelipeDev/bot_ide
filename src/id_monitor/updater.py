@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import tempfile
 import urllib.error
@@ -36,6 +37,32 @@ logger = logging.getLogger(__name__)
 Progress = Callable[[str], None]
 UPDATE_CONFIG_PATH = CONFIG_DIR / "update.yaml"
 USER_AGENT = f"id-monitor-updater/{CURRENT_VERSION}"
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Contexto SSL com CAs do pacote certifi (evita CERTIFICATE_VERIFY_FAILED no Windows)."""
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001 - cai no store padrao do sistema
+        return ssl.create_default_context()
+
+
+def _urlopen(request: urllib.request.Request, *, timeout: float):
+    return urllib.request.urlopen(request, timeout=timeout, context=_ssl_context())
+
+
+def _network_error_message(exc: BaseException) -> str:
+    text = str(exc)
+    if "CERTIFICATE_VERIFY_FAILED" in text or "SSL" in text.upper():
+        return (
+            "Falha de certificado SSL ao falar com o GitHub "
+            "(comum em alguns Pythons no Windows). "
+            "Atualize para a versao mais recente do programa ou rode instalar.bat de novo. "
+            f"Detalhe: {exc}"
+        )
+    return f"Sem internet ou GitHub inacessivel: {exc}"
 
 # Pastas/arquivos do usuario que NAO devem ser sobrescritos pela atualizacao.
 PRESERVE_NAMES = {
@@ -137,7 +164,7 @@ def _http_get_json(url: str) -> dict:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with _urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
@@ -147,7 +174,9 @@ def _http_get_json(url: str) -> dict:
             ) from exc
         raise UpdateError(f"GitHub respondeu HTTP {exc.code} ao consultar atualizacoes.") from exc
     except urllib.error.URLError as exc:
-        raise UpdateError(f"Sem internet ou GitHub inacessivel: {exc}") from exc
+        raise UpdateError(_network_error_message(exc)) from exc
+    except ssl.SSLError as exc:
+        raise UpdateError(_network_error_message(exc)) from exc
 
 
 def _pick_asset(release: dict, name_contains: str) -> dict:
@@ -199,8 +228,11 @@ def check_for_update(settings: UpdateSettings | None = None) -> AvailableUpdate 
 def _download(url: str, dest: Path, progress: Progress) -> None:
     progress(f"Baixando {dest.name}...")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response, dest.open("wb") as out:
-        shutil.copyfileobj(response, out)
+    try:
+        with _urlopen(request, timeout=120) as response, dest.open("wb") as out:
+            shutil.copyfileobj(response, out)
+    except (urllib.error.URLError, ssl.SSLError) as exc:
+        raise UpdateError(_network_error_message(exc)) from exc
 
 
 def _should_preserve(relative: Path) -> bool:

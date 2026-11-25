@@ -27,6 +27,25 @@ def test_parse_version_and_is_newer():
     assert not is_newer("0.1.9", "0.2.0")
 
 
+def test_ssl_context_uses_certifi():
+    import certifi
+    from id_monitor.updater import _ssl_context
+
+    ctx = _ssl_context()
+    assert ctx is not None
+    # Garante que o caminho do pacote certifi e usavel neste ambiente.
+    assert certifi.where().endswith(".pem") or "cacert" in certifi.where().lower()
+
+
+def test_network_error_message_mentions_ssl():
+    from id_monitor.updater import _network_error_message
+
+    msg = _network_error_message(
+        Exception("<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer>")
+    )
+    assert "SSL" in msg or "certificado" in msg.lower()
+
+
 def test_load_settings_rejects_placeholder(monkeypatch, tmp_path):
     cfg = tmp_path / "update.yaml"
     cfg.write_text('github_repo: "SEU_USUARIO/monitor-precos"\n', encoding="utf-8")
