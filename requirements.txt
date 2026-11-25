@@ -9,3 +9,5 @@ ruamel.yaml>=0.18
 anthropic>=0.40
 keyring>=25.0
 certifi>=2024.0
+cryptography>=42.0
+google-cloud-firestore>=2.16

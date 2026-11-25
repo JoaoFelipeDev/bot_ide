@@ -12,3 +12,6 @@ logs/
 .env
 .pytest_cache/
 *.zip
+*-sa.json
+*service-account*.json
+secrets/

@@ -122,6 +122,7 @@ class App(tk.Tk):
         # Catalogo IDE e so atalho opcional: nao baixa sozinho na abertura (evita sugerir
         # que a lista de monitoramento vem daqui). O usuario atualiza na aba se quiser.
         self.after(2500, self._startup_update_check)
+        self.after(1800, self._startup_cloud_pull)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
     # ------------------------------------------------------------------ layout
@@ -134,12 +135,14 @@ class App(tk.Tk):
         catalog_frame = ttk.Frame(notebook)
         results_frame = ttk.Frame(notebook)
         competitors_frame = ttk.Frame(notebook)
+        schedule_frame = ttk.Frame(notebook)
         ai_frame = ttk.Frame(notebook)
         notebook.add(books_frame, text="Livros monitorados")
         notebook.add(catalog_frame, text="Atalho catalogo IDE (opcional)")
         notebook.add(results_frame, text="Resultados")
         self._results_tab = results_frame
         notebook.add(competitors_frame, text="Concorrentes")
+        notebook.add(schedule_frame, text="Agendamento / E-mail")
         notebook.add(ai_frame, text="Configuracoes de IA")
         self._ai_tab = ai_frame
         self._catalog_tab = catalog_frame
@@ -149,6 +152,7 @@ class App(tk.Tk):
         self._build_results_tab(results_frame)
         notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self._build_competitors_tab(competitors_frame)
+        self._build_schedule_tab(schedule_frame)
         self._build_ai_tab(ai_frame)
 
         actions = ttk.Frame(self)
@@ -270,6 +274,9 @@ class App(tk.Tk):
         )
         session.add(product)
         session.commit()
+        from id_monitor.cloud.sync_books import push_product
+
+        push_product(product)
         self.refresh_books()
         self._append_log(f"Livro adicionado: {values['title']}" + (f" | ISBN {values['isbn']}" if values.get("isbn") else ""))
 
@@ -302,6 +309,9 @@ class App(tk.Tk):
         db_product.sku = values["sku"]
         db_product.price_id_livraria = values["price"]
         session.commit()
+        from id_monitor.cloud.sync_books import push_product
+
+        push_product(db_product)
         self.refresh_books()
         self._append_log(f"Livro atualizado: {values['title']}")
 
@@ -319,6 +329,9 @@ class App(tk.Tk):
         ):
             return
         removed = clear_monitored_books(delete_history=True)
+        from id_monitor.cloud.sync_books import push_clear_all
+
+        push_clear_all()
         self.refresh_books()
         self.refresh_results()
         if hasattr(self, "_catalog_items") and self._catalog_items:
@@ -333,6 +346,9 @@ class App(tk.Tk):
         db_product = session.get(Product, product.id)
         db_product.active = not db_product.active
         session.commit()
+        from id_monitor.cloud.sync_books import push_product
+
+        push_product(db_product)
         self.refresh_books()
         state = "ativado" if db_product.active else "desativado"
         self._append_log(f"Livro '{db_product.title}' {state}.")
@@ -844,6 +860,314 @@ class App(tk.Tk):
             )
             self.notebook.select(self._ai_tab)
 
+    # ------------------------------------------ aba agendamento / e-mail / nuvem
+    def _build_schedule_tab(self, parent: ttk.Frame) -> None:
+        intro = (
+            "Configure o banco compartilhado (Firestore IDE), o e-mail (Resend) e a agenda semanal.\n"
+            "O PC precisa ficar ligado no horario; o Windows Task Scheduler dispara a coleta."
+        )
+        ttk.Label(parent, text=intro, foreground="#555555").pack(anchor="w", padx=12, pady=(12, 8))
+
+        cloud = ttk.LabelFrame(parent, text="Firestore compartilhado")
+        cloud.pack(fill="x", padx=12, pady=6)
+        from id_monitor.cloud.settings import load_cloud_settings
+
+        cfg = load_cloud_settings()
+        self.cloud_enabled_var = tk.BooleanVar(value=cfg.enabled)
+        ttk.Checkbutton(cloud, text="Usar Firestore compartilhado", variable=self.cloud_enabled_var).grid(
+            row=0, column=0, columnspan=3, sticky="w", padx=8, pady=4
+        )
+        ttk.Label(cloud, text="Project ID:").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+        self.cloud_project_var = tk.StringVar(value=cfg.project_id)
+        ttk.Entry(cloud, textvariable=self.cloud_project_var, width=28).grid(row=1, column=1, sticky="w", pady=4)
+        ttk.Label(cloud, text="JSON da conta de servico:").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        self.cloud_sa_var = tk.StringVar(value=cfg.service_account_json)
+        ttk.Entry(cloud, textvariable=self.cloud_sa_var, width=52).grid(row=2, column=1, sticky="w", pady=4)
+        ttk.Button(cloud, text="...", width=3, command=self._browse_service_account).grid(row=2, column=2, padx=4)
+        cloud_btns = ttk.Frame(cloud)
+        cloud_btns.grid(row=3, column=1, sticky="w", pady=6)
+        ttk.Button(cloud_btns, text="Salvar nuvem", command=self._on_save_cloud).pack(side="left", padx=(0, 6))
+        ttk.Button(cloud_btns, text="Testar conexao", command=self._on_test_cloud).pack(side="left", padx=6)
+        ttk.Button(cloud_btns, text="Puxar livros agora", command=self._on_pull_books).pack(side="left", padx=6)
+
+        mail = ttk.LabelFrame(parent, text="E-mail (Resend)")
+        mail.pack(fill="x", padx=12, pady=6)
+        ttk.Label(mail, text="Remetente (from):").grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        self.mail_from_var = tk.StringVar(value=cfg.from_email)
+        ttk.Entry(mail, textvariable=self.mail_from_var, width=40).grid(row=0, column=1, sticky="w", pady=4)
+        ttk.Label(mail, text="Destinatarios (virgula):").grid(row=1, column=0, sticky="w", padx=8, pady=4)
+        self.mail_to_var = tk.StringVar(value=", ".join(cfg.recipients))
+        ttk.Entry(mail, textvariable=self.mail_to_var, width=52).grid(row=1, column=1, sticky="w", pady=4)
+        ttk.Label(mail, text="API key Resend:").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        self.mail_key_var = tk.StringVar()
+        ttk.Entry(mail, textvariable=self.mail_key_var, show="*", width=40).grid(row=2, column=1, sticky="w", pady=4)
+        mail_btns = ttk.Frame(mail)
+        mail_btns.grid(row=3, column=1, sticky="w", pady=6)
+        ttk.Button(mail_btns, text="Salvar e-mail", command=self._on_save_email).pack(side="left", padx=(0, 6))
+        ttk.Button(mail_btns, text="Enviar relatorio agora", command=self._on_send_email_now).pack(side="left", padx=6)
+
+        sched = ttk.LabelFrame(parent, text="Agenda semanal")
+        sched.pack(fill="x", padx=12, pady=6)
+        self.sched_enabled_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(sched, text="Agenda ativa", variable=self.sched_enabled_var).grid(
+            row=0, column=0, columnspan=4, sticky="w", padx=8, pady=4
+        )
+        days_frame = ttk.Frame(sched)
+        days_frame.grid(row=1, column=0, columnspan=4, sticky="w", padx=8, pady=4)
+        labels = [("mon", "Seg"), ("tue", "Ter"), ("wed", "Qua"), ("thu", "Qui"),
+                  ("fri", "Sex"), ("sat", "Sab"), ("sun", "Dom")]
+        self.sched_day_vars: dict[str, tk.BooleanVar] = {}
+        for i, (key, label) in enumerate(labels):
+            var = tk.BooleanVar(value=key in ("mon", "wed", "fri"))
+            self.sched_day_vars[key] = var
+            ttk.Checkbutton(days_frame, text=label, variable=var).pack(side="left", padx=4)
+        ttk.Label(sched, text="Horario (HH:MM):").grid(row=2, column=0, sticky="w", padx=8, pady=4)
+        self.sched_time_var = tk.StringVar(value="10:00")
+        ttk.Entry(sched, textvariable=self.sched_time_var, width=8).grid(row=2, column=1, sticky="w", pady=4)
+        sched_btns = ttk.Frame(sched)
+        sched_btns.grid(row=3, column=0, columnspan=4, sticky="w", padx=8, pady=8)
+        ttk.Button(sched_btns, text="Salvar agenda", command=self._on_save_schedule).pack(side="left", padx=(0, 6))
+        ttk.Button(sched_btns, text="Registrar no Windows", command=self._on_register_schedule).pack(side="left", padx=6)
+        ttk.Button(sched_btns, text="Remover do Windows", command=self._on_unregister_schedule).pack(side="left", padx=6)
+        ttk.Button(sched_btns, text="Rodar ciclo agora", command=self._on_run_scheduled_now).pack(side="left", padx=6)
+
+        self.after(400, self._load_schedule_from_cloud)
+
+    def _browse_service_account(self) -> None:
+        from tkinter import filedialog
+
+        path = filedialog.askopenfilename(
+            parent=self,
+            title="JSON da conta de servico Google",
+            filetypes=[("JSON", "*.json"), ("Todos", "*.*")],
+        )
+        if path:
+            self.cloud_sa_var.set(path)
+
+    def _on_save_cloud(self) -> None:
+        from id_monitor.cloud.settings import CloudSettings, load_cloud_settings, save_cloud_settings
+
+        current = load_cloud_settings()
+        save_cloud_settings(CloudSettings(
+            enabled=bool(self.cloud_enabled_var.get()),
+            project_id=self.cloud_project_var.get().strip() or "ide-digital",
+            collection=current.collection,
+            service_account_json=self.cloud_sa_var.get().strip(),
+            from_email=self.mail_from_var.get().strip(),
+            recipients=[r.strip() for r in self.mail_to_var.get().split(",") if r.strip()],
+            email_provider="resend",
+        ))
+        self._append_log("Configuracao de nuvem salva em config/cloud.yaml.")
+        messagebox.showinfo("Nuvem", "Configuracao salva.")
+
+    def _on_test_cloud(self) -> None:
+        self._on_save_cloud()
+
+        def work():
+            from id_monitor.cloud.firestore_store import test_connection
+
+            return test_connection()
+
+        def on_success(msg: str) -> None:
+            messagebox.showinfo("Conexao OK", msg)
+            self._append_log(msg)
+
+        self._run_background("Testando Firestore", work, on_success)
+
+    def _on_pull_books(self) -> None:
+        def work():
+            from id_monitor.cloud.sync_books import pull_books_into_local
+
+            return pull_books_into_local()
+
+        def on_success(n: int) -> None:
+            self.refresh_books()
+            messagebox.showinfo("Sync", f"{n} livro(s) sincronizado(s) do Firestore.")
+
+        self._run_background("Puxando livros do Firestore", work, on_success)
+
+    def _on_save_email(self) -> None:
+        self._on_save_cloud()
+        key = self.mail_key_var.get().strip()
+        if key:
+            from id_monitor.notify.email_resend import EmailError, set_resend_api_key
+
+            try:
+                set_resend_api_key(key, sync_cloud=True)
+            except EmailError as exc:
+                messagebox.showerror("E-mail", str(exc))
+                return
+        from id_monitor.cloud.firestore_store import CloudStoreError, get_monitor_settings, save_monitor_settings
+        from id_monitor.cloud.settings import cloud_configured
+
+        if cloud_configured():
+            try:
+                payload = get_monitor_settings()
+                payload["email"] = {
+                    "from_email": self.mail_from_var.get().strip(),
+                    "recipients": [r.strip() for r in self.mail_to_var.get().split(",") if r.strip()],
+                }
+                save_monitor_settings(payload)
+            except CloudStoreError as exc:
+                messagebox.showwarning("E-mail", f"Salvo localmente; Firestore: {exc}")
+        self._append_log("Configuracao de e-mail salva.")
+        messagebox.showinfo("E-mail", "Destinatarios e remetente salvos.")
+
+    def _on_send_email_now(self) -> None:
+        def work():
+            from id_monitor.notify.email_resend import send_report_email
+            from id_monitor.reporting.report import build_report
+
+            path = build_report()
+            return send_report_email(path)
+
+        def on_success(result) -> None:
+            messagebox.showinfo("E-mail", result.message)
+            self._append_log(f"E-mail enviado: {result.provider_id}")
+
+        self._run_background("Gerando e enviando relatorio", work, on_success)
+
+    def _schedule_payload(self) -> dict:
+        weekdays = [k for k, v in self.sched_day_vars.items() if v.get()]
+        return {
+            "schedule": {
+                "enabled": bool(self.sched_enabled_var.get()),
+                "weekdays": weekdays,
+                "time": self.sched_time_var.get().strip() or "10:00",
+            },
+            "email": {
+                "from_email": self.mail_from_var.get().strip(),
+                "recipients": [r.strip() for r in self.mail_to_var.get().split(",") if r.strip()],
+            },
+        }
+
+    def _load_schedule_from_cloud(self) -> None:
+        try:
+            from id_monitor.cloud.firestore_store import get_monitor_settings
+            from id_monitor.cloud.settings import cloud_configured, load_cloud_settings
+
+            cfg = load_cloud_settings()
+            data = get_monitor_settings(cfg) if cloud_configured() else {
+                "schedule": {"enabled": False, "weekdays": ["mon", "wed", "fri"], "time": "10:00"},
+                "email": {"from_email": cfg.from_email, "recipients": cfg.recipients},
+            }
+            sch = data.get("schedule") or {}
+            self.sched_enabled_var.set(bool(sch.get("enabled")))
+            self.sched_time_var.set(str(sch.get("time") or "10:00"))
+            days = set(sch.get("weekdays") or [])
+            for key, var in self.sched_day_vars.items():
+                var.set(key in days)
+            email = data.get("email") or {}
+            if email.get("from_email"):
+                self.mail_from_var.set(email["from_email"])
+            if email.get("recipients"):
+                self.mail_to_var.set(", ".join(email["recipients"]))
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"Nao deu para carregar agenda da nuvem: {exc}")
+
+    def _on_save_schedule(self) -> None:
+        self._on_save_cloud()
+        from id_monitor.cloud.firestore_store import CloudStoreError, save_monitor_settings
+        from id_monitor.cloud.settings import cloud_configured
+
+        payload = self._schedule_payload()
+        if cloud_configured():
+            try:
+                save_monitor_settings(payload)
+            except CloudStoreError as exc:
+                messagebox.showwarning("Agenda", f"Salvo localmente; Firestore: {exc}")
+                return
+        self._append_log(f"Agenda salva: {payload['schedule']}")
+        messagebox.showinfo("Agenda", "Agenda salva. Use 'Registrar no Windows' para ativar no Task Scheduler.")
+
+    def _on_register_schedule(self) -> None:
+        self._on_save_schedule()
+        payload = self._schedule_payload()["schedule"]
+        weekdays = ",".join(payload["weekdays"]) or "mon"
+        time_str = payload["time"]
+
+        def work():
+            from id_monitor.config import PROJECT_ROOT as ROOT
+
+            ps = ROOT / "scripts" / "register_weekly_schedule.ps1"
+            completed = subprocess.run(
+                [
+                    "powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps),
+                    "-Weekdays", weekdays, "-Time", time_str,
+                ],
+                capture_output=True, text=True, check=False,
+            )
+            if completed.returncode != 0:
+                raise RuntimeError(completed.stderr or completed.stdout or "Falha ao registrar tarefa")
+            return completed.stdout.strip()
+
+        def on_success(out: str) -> None:
+            messagebox.showinfo("Task Scheduler", out or "Tarefa registrada.")
+            self._append_log(out)
+
+        self._run_background("Registrando agenda no Windows", work, on_success)
+
+    def _on_unregister_schedule(self) -> None:
+        def work():
+            from id_monitor.config import PROJECT_ROOT as ROOT
+
+            ps = ROOT / "scripts" / "register_weekly_schedule.ps1"
+            completed = subprocess.run(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps), "-Unregister"],
+                capture_output=True, text=True, check=False,
+            )
+            if completed.returncode != 0:
+                raise RuntimeError(completed.stderr or completed.stdout or "Falha ao remover tarefa")
+            return completed.stdout.strip()
+
+        def on_success(out: str) -> None:
+            messagebox.showinfo("Task Scheduler", out or "Tarefa removida.")
+            self._append_log(out)
+
+        self._run_background("Removendo agenda do Windows", work, on_success)
+
+    def _on_run_scheduled_now(self) -> None:
+        def work():
+            from id_monitor.schedule_cycle import run_scheduled_cycle
+
+            return run_scheduled_cycle(progress=lambda m: logging.getLogger("id_monitor").info(m))
+
+        def on_success(result) -> None:
+            self.refresh_results()
+            messagebox.showinfo(
+                "Ciclo",
+                f"Concluido.\nRegistros: {result.records_written}\n"
+                f"E-mail: {result.email_status}\nRelatorio: {result.report_path}",
+            )
+
+        self._run_background("Rodando ciclo agendado", work, on_success)
+
+    def _startup_cloud_pull(self) -> None:
+        from id_monitor.cloud.settings import cloud_configured
+
+        if not cloud_configured():
+            return
+
+        def work():
+            from id_monitor.cloud.sync_books import pull_books_into_local
+
+            return pull_books_into_local()
+
+        def on_success(n: int) -> None:
+            if n:
+                self.refresh_books()
+                self._append_log(f"Livros sincronizados da nuvem na abertura: {n}.")
+
+        # Silencioso: nao usa _run_background para nao travar botoes na abertura.
+        def worker() -> None:
+            try:
+                n = work()
+                self.after(0, lambda: on_success(n))
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda: self._append_log(f"Sync nuvem na abertura falhou: {exc}"))
+
+        threading.Thread(target=worker, daemon=True).start()
+
     # ------------------------------------------------------- aba configuracoes de IA
     def _build_ai_tab(self, parent: ttk.Frame) -> None:
         intro = (
@@ -990,6 +1314,16 @@ class App(tk.Tk):
         self._append_log(f"Coleta concluida: {records_written} registro(s) gravados.")
         self.refresh_results()
         self.notebook.select(self._results_tab)  # mostra o resultado na hora, antes de exportar
+        try:
+            from id_monitor.cloud.settings import cloud_configured
+            from id_monitor.cloud.sync_runs import publish_collection_run, start_cloud_run_safe
+
+            if cloud_configured():
+                run_id = start_cloud_run_safe()
+                publish_collection_run(run_id=run_id, records_written=records_written, status="ok")
+                self._append_log(f"Resultados enviados ao Firestore (run {run_id}).")
+        except Exception as exc:  # noqa: BLE001
+            self._append_log(f"Sync Firestore apos coleta falhou: {exc}")
 
     def _on_tab_changed(self, _event=None) -> None:
         if self.notebook.select() == str(self._results_tab):

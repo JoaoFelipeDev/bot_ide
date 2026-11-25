@@ -88,7 +88,25 @@ Sem chave de IA o programa funciona normalmente com os 3 sites que ja vem pronto
 consegue mapear sites novos nem se consertar sozinho. Se um site mudar de layout no futuro e a chave estiver
 configurada, a IA conserta a busca sozinha na proxima coleta.
 
-## 5. Reinstalando ou atualizando
+## 5. Agendamento semanal, Firestore e e-mail
+
+Na aba **Agendamento / E-mail**:
+
+1. **Firestore compartilhado** (projeto `ide-digital`): marque "Usar Firestore", aponte o JSON da
+   **conta de servico** (com permissao de escrita na colecao `price_monitor`; nao use o zip
+   publico para guardar esse JSON). Clique em **Testar conexao** e **Salvar nuvem**.
+2. **E-mail (Resend)**: cadastre um dominio/remetente no Resend, cole a API key, informe
+   `from` e destinatarios (varios separados por virgula). **Salvar e-mail**.
+3. **Agenda**: escolha dias (ex.: Seg/Qua/Sex) e horario (ex.: 10:00), **Salvar agenda**, depois
+   **Registrar no Windows** (cria a tarefa `IDMonitorPrecosAgenda` no Task Scheduler).
+4. O PC precisa estar **ligado** no horario. Use **Rodar ciclo agora** para testar
+   (coleta + Excel + sync + e-mail).
+
+CLI equivalente: `id-monitor run-scheduled`, `id-monitor sync-books`, `id-monitor send-report-email`.
+
+Scripts: `scripts\register_weekly_schedule.ps1` e `scripts\run_scheduled_cycle.ps1`.
+
+## 6. Reinstalando ou atualizando
 
 ### Atualizacao automatica (GitHub Releases)
 
@@ -112,7 +130,7 @@ Se preferir sem GitHub: gere um novo `.zip`, extrair por cima da pasta antiga (o
 nova) e rode `instalar.bat` de novo - ele reaproveita o ambiente virtual se ja estiver valido.
 Seus dados (`data\monitor.db`) e relatorios (`reports\`) nao sao apagados pelo instalador.
 
-## 6. Problemas comuns
+## 7. Problemas comuns
 
 - **"Nao foi possivel conectar"/instalacao trava no download**: confirme que a maquina tem
   acesso a internet e que nenhum firewall/antivirus esta bloqueando `python.org` ou

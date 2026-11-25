@@ -1,0 +1,17 @@
+# Configuracao do banco compartilhado (Firestore do projeto IDE) e e-mail.
+# O JSON da conta de servico NAO deve ir no zip de distribuicao: aponte o caminho local abaixo
+# ou escolha o arquivo na aba "Nuvem / E-mail" da interface.
+
+enabled: false
+project_id: "ide-digital"
+# Colecao raiz (settings/secrets) + subcolecoes books/runs embaixo do doc "data"
+collection: "price_monitor"
+# Caminho absoluto ou relativo a pasta do projeto. Ex.: C:\segredos\ide-monitor-sa.json
+service_account_json: ""
+
+# E-mail (Resend) — a API key fica criptografada no Firestore (doc secrets) / keyring local.
+email:
+  provider: "resend"
+  from_email: ""
+  # Lista inicial; a GUI tambem edita e grava em price_monitor/settings
+  recipients: []

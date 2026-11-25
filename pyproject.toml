@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "id-monitor"
-version = "0.2.3"
+version = "0.3.0"
 description = "Monitor de precos de concorrentes para a IDE Livraria"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,6 +19,8 @@ dependencies = [
     "anthropic>=0.40",
     "keyring>=25.0",
     "certifi>=2024.0",
+    "cryptography>=42.0",
+    "google-cloud-firestore>=2.16",
 ]
 
 [project.scripts]

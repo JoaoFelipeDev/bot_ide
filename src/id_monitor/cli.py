@@ -15,6 +15,9 @@ Comandos:
   id-monitor map-site     Mapeia um concorrente com a IA (descobre a busca e os seletores).
   id-monitor check-update Verifica se ha versao nova no GitHub (Release publica).
   id-monitor self-update  Baixa e aplica a atualizacao (preserva data/, logs, lista de livros).
+  id-monitor sync-books   Sincroniza livros com o Firestore compartilhado.
+  id-monitor send-report-email  Envia o Excel por e-mail (Resend).
+  id-monitor run-scheduled      Ciclo completo: collect + report + sync + e-mail.
 
 Exemplos:
   id-monitor add-book --title "O Pequeno Principe" --isbn 9788574061346 --price 24.90
@@ -82,6 +85,9 @@ def add_book(title: str, author: str | None, isbn: str | None, sku: str | None, 
         existing.active = True
         click.echo(f"Livro atualizado (mesmo ISBN {isbn}): {title}")
     session.commit()
+    from id_monitor.cloud.sync_books import push_product
+
+    push_product(existing)
 
 
 @cli.command("list-books")
@@ -296,6 +302,57 @@ def self_update_cmd(yes: bool) -> None:
     except Exception as exc:  # noqa: BLE001
         raise click.ClickException(str(exc)) from exc
     click.echo("Feche e abra o programa para usar a versao nova.")
+
+
+@cli.command("sync-books")
+@click.option("--push", "direction", flag_value="push", help="Envia a lista local para o Firestore.")
+@click.option("--pull", "direction", flag_value="pull", default=True, help="Puxa a lista do Firestore (padrao).")
+def sync_books_cmd(direction: str) -> None:
+    """Sincroniza livros monitorados com o Firestore compartilhado."""
+    from id_monitor.cloud.settings import cloud_configured
+    from id_monitor.cloud.sync_books import pull_books_into_local, push_product
+
+    if not cloud_configured():
+        raise click.ClickException("Nuvem nao configurada (config/cloud.yaml + JSON da service account).")
+    if direction == "push":
+        session = get_session()
+        products = session.query(Product).all()
+        for product in products:
+            push_product(product)
+        click.echo(f"Enviados {len(products)} livro(s) ao Firestore.")
+        return
+    n = pull_books_into_local(progress=click.echo)
+    click.echo(f"Sync concluido ({n} item(ns)).")
+
+
+@cli.command("send-report-email")
+@click.option("--report", "report_path", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Caminho do Excel; se omitido, gera um relatorio novo.")
+def send_report_email_cmd(report_path: Path | None) -> None:
+    """Envia o relatorio Excel por e-mail via Resend."""
+    from id_monitor.notify.email_resend import EmailError, send_report_email
+
+    path = report_path or build_report()
+    try:
+        result = send_report_email(path)
+    except EmailError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"OK: {result.message} id={result.provider_id}")
+
+
+@cli.command("run-scheduled")
+def run_scheduled_cmd() -> None:
+    """Ciclo completo: collect + report + sync Firestore + e-mail (usado pelo Task Scheduler)."""
+    from id_monitor.schedule_cycle import run_scheduled_cycle
+
+    try:
+        result = run_scheduled_cycle(progress=click.echo)
+    except Exception as exc:  # noqa: BLE001
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"Ciclo OK: run={result.run_id} registros={result.records_written} "
+        f"email={result.email_status} relatorio={result.report_path}"
+    )
 
 
 if __name__ == "__main__":
